@@ -1,0 +1,16 @@
+# Fichiers de compilation Arduino
+applet/
+*.lst
+*.elf
+*.bin
+*.eep
+*.hex
+*.o
+*.a
+*.srec
+*.tmp
+*.bak
+
+# Dossiers spécifiques à PlatformIO ou VS Code
+.pio/
+.vscode/
