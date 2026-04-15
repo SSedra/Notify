@@ -28,10 +28,12 @@ void setup() {
   // init capteur rfid
   SPI.begin();
   rfid.PCD_Init();
+  
   lcd.clear();
   lcd.setCursor(3,1);
   rfid.PCD_AntennaOn();
   lcd.print("Device ready");
+  
   delay(2000);
   lcd.clear();
 }
