@@ -11,22 +11,25 @@ MFRC522 rfid(5,2);
 int nbDot=0;
 unsigned long tmpDernierPrint=0;
 
-enum Profile{admin ,casual,temp};
+enum Profile{admin ,owner,temp};
 
 typedef struct 
 {
   byte UID[7];
+  byte lnUID;  
   Profile profile;
-  char nomUtilisateur[35] ;
+  char nomUtilisateur[35];
   bool activite = false;
-  int nbAcces =0 ;
+  int nbAcces = 0;
 } badge;
 
 badge reconnue[10];
 
-static void badgeInit(badge tabBadge[], int indiceTabBadge,byte UID[7],Profile profile,const char nomUtilisateur[35],bool activite,int nbAcces)
+static void badgeInit(badge tabBadge[], int indiceTabBadge,byte lnUID,byte UID[7],Profile profile,const char nomUtilisateur[35],bool activite,int nbAcces)
 {
-  for(int i=0;i<7;i++)
+  tabBadge[indiceTabBadge].lnUID=lnUID;
+
+  for(int i=0;i<lnUID;i++)
     tabBadge[indiceTabBadge].UID[i]=UID[i];
 
   tabBadge[indiceTabBadge].profile=profile;
@@ -41,20 +44,23 @@ static void badgeInit(badge tabBadge[], int indiceTabBadge,byte UID[7],Profile p
 
 }
 
-static bool badgeCheck(badge tabBadge[], int lnTabBadge,badge badgeACheke)
+static int badgeCheck(badge tabBadge[], int lnTabBadge, badge badgeACheke)
 {
-  for(int i=0;i<lnTabBadge;i++)
+  for(int i = 0; i < lnTabBadge; i++)
   {
-    if(!memcmp(tabBadge[i].UID,badgeACheke.UID,sizeof(byte)*7))
+    if(tabBadge[i].lnUID == badgeACheke.lnUID)
     {
-      if(tabBadge[i].activite)
-      return true;
-      return false;     
-    }   
-
+      if(memcmp(tabBadge[i].UID,
+                badgeACheke.UID,
+                badgeACheke.lnUID) == 0)
+      {
+        if(tabBadge[i].activite)
+          return 0;
+      }
+    }
   }
-  
-  return false;
+
+  return 1;
 }
 
 void setup() {
@@ -87,11 +93,11 @@ void setup() {
   //badge reconnue
     //Sahy Sedra
     byte idSahy[] = {0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66}; // erreur propable : uid probalement non reconnu
-    badgeInit(reconnue,0,idSahy,temp,"Sahy Sedra",true,3);
+    badgeInit(reconnue,0,7,idSahy,temp,"Sahy Sedra",true,3);
 
     //adlmin
     byte idmin[]={0x01,0x02,0x03,0x04};// erreur propable : uid non reconnu 
-    badgeInit(reconnue,1,idmin,admin,"boss",true,-1);
+    badgeInit(reconnue,1,4,idmin,admin,"boss",true,-1);
 
 }
 
@@ -124,17 +130,31 @@ if(!rfid.PICC_ReadCardSerial()) {
     return;
   } 
 
+  //init badge temporaire pour comparer dans reconnu 
   badge scan; 
-  for(int i=0; i<7; i++) {
+  scan.lnUID=rfid.uid.size;
+  for(int i=0; i<scan.lnUID; i++) {
     scan.UID[i] = rfid.uid.uidByte[i];
   }
 
-  if (badgeCheck(reconnue, 10, scan)) {
+  
+  if (badgeCheck(reconnue, 10, scan)==0) {
     lcd.clear();
     lcd.setCursor(3,1);
     lcd.print("Bienvenue !");
     delay(1500);
     lcd.clear();
+
+    //impression UID
+    Serial.print("UID : ");
+
+    for (byte i = 0; i < rfid.uid.size; i++) {
+      Serial.print(rfid.uid.uidByte[i], HEX);
+      Serial.print(" ");
+    }
+
+    Serial.println();
+
   } else {
     lcd.clear();
     lcd.setCursor(3,1);
