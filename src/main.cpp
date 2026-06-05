@@ -3,6 +3,7 @@
 #include <MFRC522.h>
 #include <SPI.h>
 #include <cstdint>
+#include "notify.h"
 
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
@@ -11,61 +12,10 @@ MFRC522 rfid(5,2);
 int nbDot=0;
 unsigned long tmpDernierPrint=0;
 
-enum Profile{admin ,owner,temp};
-
-typedef struct 
-{
-  byte UID[7];
-  byte lnUID;  
-  Profile profile;
-  char nomUtilisateur[35];
-  bool activite = false;
-  int nbAcces = 0;
-} badge;
-
-badge reconnue[10];
-
-static void badgeInit(badge tabBadge[], int indiceTabBadge,byte lnUID,byte UID[7],Profile profile,const char nomUtilisateur[35],bool activite,int nbAcces)
-{
-  tabBadge[indiceTabBadge].lnUID=lnUID;
-
-  for(int i=0;i<lnUID;i++)
-    tabBadge[indiceTabBadge].UID[i]=UID[i];
-
-  tabBadge[indiceTabBadge].profile=profile;
-  
-  for(int i=0;nomUtilisateur[i]!='\0' && i<34;i++)
-    tabBadge[indiceTabBadge].nomUtilisateur[i]=nomUtilisateur[i];
-  tabBadge[indiceTabBadge].nomUtilisateur[34]='\0';
-
-  tabBadge[indiceTabBadge].activite=activite;
-
-  tabBadge[indiceTabBadge].nbAcces=nbAcces;
-
-}
-
-static int badgeCheck(badge tabBadge[], int lnTabBadge, badge badgeACheke)
-{
-  for(int i = 0; i < lnTabBadge; i++)
-  {
-    if(tabBadge[i].lnUID == badgeACheke.lnUID)
-    {
-      if(memcmp(tabBadge[i].UID,
-                badgeACheke.UID,
-                badgeACheke.lnUID) == 0)
-      {
-        if(tabBadge[i].activite)
-          return 0;
-      }
-    }
-  }
-
-  return 1;
-}
-
 void setup() {
-  // init ecran lcd
   Serial.begin(115200);
+
+  // init ecran lcd
   lcd.init();
   lcd.backlight();
 
@@ -85,19 +35,24 @@ void setup() {
   lcd.clear();
   lcd.setCursor(3,1);
   rfid.PCD_AntennaOn();
-  lcd.print("Device ready");
-  
+  lcd.print("Device ready");  
   delay(2000);
   lcd.clear();
 
-  //badge reconnue
-    //Sahy Sedra
-    byte idSahy[] = {0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66}; // erreur propable : uid probalement non reconnu
-    badgeInit(reconnue,0,7,idSahy,temp,"Sahy Sedra",true,3);
+  //badge creation
+    //visiteur :Zandry
+    byte idZandry[]={0xAA,0xBB,0xCC,0xDD};
+    tBadge ZandryBdge=badgeCreer();
+    badgeInit(&ZandryBdge,4,idZandry,temp,"Zandry",true,5);
+    //proprio :Sahy Sedra
+    byte idSahy[]={0x11,0x22,0x33,0x44};
+    tBadge SahyBdge=badgeCreer();
+    badgeInit(&SahyBdge,4,idSahy,owner,"Sahy Sedra",true,4);
 
-    //adlmin
-    byte idmin[]={0x01,0x02,0x03,0x04};// erreur propable : uid non reconnu 
-    badgeInit(reconnue,1,4,idmin,admin,"boss",true,-1);
+    //admin
+    byte idmin[]={0x01,0x02,0x03,0x04};
+    tBadge BossBadge=badgeCreer();
+    badgeInit(&BossBadge,4,idmin,admin,"boss",true,-1);
 
 }
 
@@ -131,21 +86,9 @@ if(!rfid.PICC_ReadCardSerial()) {
   } 
 
   //init badge temporaire pour comparer dans reconnu 
-  badge scan; 
-  scan.lnUID=rfid.uid.size;
-  for(int i=0; i<scan.lnUID; i++) {
-    scan.UID[i] = rfid.uid.uidByte[i];
-  }
+  tBadge scan=badgeChercher(rfid.uid.uidByte,rfid.uid.size);
 
-  
-  if (badgeCheck(reconnue, 10, scan)==0) {
-    lcd.clear();
-    lcd.setCursor(3,1);
-    lcd.print("Bienvenue !");
-    delay(1500);
-    lcd.clear();
-
-    //impression UID
+  //impression UID
     Serial.print("UID : ");
 
     for (byte i = 0; i < rfid.uid.size; i++) {
@@ -154,11 +97,45 @@ if(!rfid.PICC_ReadCardSerial()) {
     }
 
     Serial.println();
+  
+  if(scan!=nullptr)//si le badge scane fait partie est un enregistre
+  {
+    if(badgeActivite(scan))//si le badge est actif
+    {
+      lcd.clear();
+      lcd.setCursor(3,1);
+      lcd.print("Bienvenue !");
+      lcd.setCursor(3,2);
+      lcd.print(badgeNom(scan)); // On affiche son nom
+      delay(1500);
+      lcd.clear();
 
-  } else {
-    lcd.clear();
+      if(badgeProfile(scan)!=admin)
+      {
+        lcd.setCursor(3,1);
+        lcd.print("credit :");
+        lcd.setCursor(3,2);
+        lcd.print(badgeAccesRestant(scan)-1);
+        delay(1500);
+        lcd.clear();
+      }
+      
+
+      //on donne l'accés au badge 
+      badgeAcceder(scan);
+    }
+    else//le badge est off et/ou perime
+    {
+      lcd.clear();
     lcd.setCursor(3,1);
     lcd.print("Acces Refuse");
+    delay(1500);
+    lcd.clear();
+    }
+  } else {//si il ne figure pas dans la liste des enregistrées
+    lcd.clear();
+    lcd.setCursor(3,1);
+    lcd.print("Non reconnue");
     delay(1500);
     lcd.clear();
   }
